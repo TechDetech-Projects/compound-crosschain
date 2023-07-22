@@ -4,6 +4,7 @@ pragma solidity ^0.8.10;
 import "@axelar-network/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecutable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "../compound/CToken.sol";
+import "./CCrosschainErc20Interface.sol";
 
 interface CompLike {
     function delegate(address delegatee) external;
@@ -14,12 +15,17 @@ interface CompLike {
  * @notice CTokens which wrap an EIP-20 underlying
  * @author Compound
  */
-contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
+contract CCrosschainErc20 is CToken, CCrosschainErc20Interface, AxelarExecutable {
     string chain;
     string underlyingSatellite;
     bytes32 internal constant SELECTOR_MINT= keccak256('mint');
     bytes32 internal constant SELECTOR_REPAY_BORROW = keccak256('repayBorrow');
+    bytes32 internal constant SELECTOR_REPAY_BORROW_BEHALF = keccak256('repayBorrowBehalf');
     bytes32 internal constant SELECTOR_ADD_RESERVES = keccak256('_addReserves');
+    bytes32 internal constant SELECTOR_UPDATE_TRANSFER_OUT = keccak256('updateTransferOut');
+
+    uint underlyingBalance = 0;
+    uint priorUnderlyingBalance = 0;
 
       modifier onlySelf() {
         require(msg.sender == address(this), 'Function must be called by the same contract only');
@@ -72,8 +78,9 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
      * @param mintAmount The amount of the underlying asset to supply
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function mint(uint mintAmount) override external onlySelf returns (uint) {
-        mintInternal(mintAmount);
+    function mint(address to,uint mintAmount) external override onlySelf returns (uint) {
+        accrueInterest();
+        mintFresh(to, mintAmount);
         return NO_ERROR;
     }
 
@@ -116,8 +123,9 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
      * @param repayAmount The amount to repay, or -1 for the full outstanding amount
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function repayBorrow(uint repayAmount) external override onlySelf returns (uint) {
-        repayBorrowInternal(repayAmount);
+    function repayBorrow(address to, uint repayAmount) external override onlySelf returns (uint) {
+        accrueInterest();
+        repayBorrowFresh(to, to, repayAmount);
         return NO_ERROR;
     }
 
@@ -128,10 +136,12 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function repayBorrowBehalf(
+        address to,
         address borrower,
         uint repayAmount
-    ) external override returns (uint) {
-        repayBorrowBehalfInternal(borrower, repayAmount);
+    ) external override onlySelf returns (uint) {
+        accrueInterest();
+        repayBorrowFresh(to, borrower, repayAmount);
         return NO_ERROR;
     }
 
@@ -175,7 +185,7 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _addReserves(uint addAmount) external override onlySelf returns (uint) {
-        return _addReservesInternal(addAmount);
+        return _addReservesInternal(addAmount); 
     }
 
     /*** Safe Token ***/
@@ -186,8 +196,7 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
      * @return The quantity of underlying tokens owned by this contract
      */
     function getCashPrior() internal view virtual override returns (uint) {
-        EIP20Interface token = EIP20Interface(underlying);
-        return token.balanceOf(address(this));
+        return priorUnderlyingBalance;
     }
 
     /**
@@ -203,6 +212,8 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
         address,
         uint amount
     ) internal virtual override returns (uint) {
+        priorUnderlyingBalance = underlyingBalance;
+        underlyingBalance += amount;
         return amount;
     }
 
@@ -223,6 +234,12 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
         bytes memory payload = abi.encode('doTranferOut', params);
         gateway.callContract(chain, underlyingSatellite, payload);
     }
+
+    function updateTransferOut(uint amount) external onlySelf {
+        priorUnderlyingBalance = underlyingBalance;
+        underlyingBalance -= amount;
+    }
+
 
     /**
      * @notice Admin call to delegate the votes of the COMP-like underlying
@@ -253,8 +270,12 @@ contract CCrosschainErc20 is CToken, CErc20Interface, AxelarExecutable {
             commandSelector = this.mint.selector;
         } else if (keccak256(functionName) == SELECTOR_REPAY_BORROW){
             commandSelector = this.repayBorrow.selector;
+        }else if (keccak256(functionName) == SELECTOR_REPAY_BORROW_BEHALF){
+            commandSelector = this.repayBorrowBehalf.selector;
         } else if (keccak256(functionName) == SELECTOR_ADD_RESERVES) {
             commandSelector = this._addReserves.selector;
+        } else if (keccak256(functionName) == SELECTOR_UPDATE_TRANSFER_OUT) {
+            commandSelector = this.updateTransferOut.selector;
         } else {
             revert('Invalid function name');
         }
