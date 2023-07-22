@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "@axelar-network/axelar-gmp-sdk-solidity": "^4.0.1",
+    "@openzeppelin/contracts": "^4.9.2",
     "bignumber.js": "^9.1.1",
     "bn-chai": "^1.0.1",
     "bn.js": "^5.2.1",
