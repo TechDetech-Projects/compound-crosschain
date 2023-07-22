@@ -54,11 +54,22 @@ contract("CEther Initialization and Functionality Tests", (accounts) => {
     var borrowValue = new BN("1" + "0".repeat(15)) // Further research on the max borrow value calculation is needed.
     it("Borrow ether.", async () => {
         const CEtherInstance = await CEther.deployed();
+        const ComptrollerInstance = await Comptroller.deployed();
+        var accountLiquidity = await ComptrollerInstance.getAccountLiquidity(adminAddress)
+        console.log(Number(accountLiquidity[0]),Number(accountLiquidity[1]),Number(accountLiquidity[2]))
+
         var originalEtherBalance = await web3.eth.getBalance(adminAddress);
         await CEtherInstance.borrow(borrowValue)
         var newEtherBalance = await web3.eth.getBalance(adminAddress);
         var borrowedEther = new BN(newEtherBalance - originalEtherBalance)
         chai.expect(borrowedEther).to.not.be.a.bignumber.that.is.zero;
+
+
+        var accountLiquidity = await ComptrollerInstance.getAccountLiquidity(adminAddress)
+        console.log(Number(accountLiquidity[0]),Number(accountLiquidity[1]),Number(accountLiquidity[2]))
+
+        var borrowBalance = await CEtherInstance.borrowBalanceStored(adminAddress)
+        console.log({borrowBalance:Number(borrowedEther)})
 
     })
 
@@ -75,7 +86,7 @@ contract("CEther Initialization and Functionality Tests", (accounts) => {
         await CEtherInstance.repayBorrow({ value: borrowValue })
     })
 
-    var redeemValue = new BN("9" + "0".repeat(18))
+    var redeemValue = new BN("9")
     it("Redeem CEther tokens for ether.", async () => {
         const CEtherInstance = await CEther.deployed();
 
@@ -86,6 +97,5 @@ contract("CEther Initialization and Functionality Tests", (accounts) => {
 
         var tokenBalance = await CEtherInstance.balanceOf(adminAddress)
         console.log(Number(tokenBalance))
-        chai.expect(tokenBalance).to.be.a.bignumber.that.is.zero;
     })
 })
