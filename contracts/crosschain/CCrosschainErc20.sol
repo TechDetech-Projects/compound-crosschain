@@ -53,6 +53,7 @@ contract CCrosschainErc20 is CToken, CCrosschainErc20Interface, AxelarExecutable
         string memory symbol_,
         uint8 decimals_
     ) AxelarExecutable(gateway_) {
+        admin = payable(msg.sender);
         initialize(
             comptroller_,
             interestRateModel_,

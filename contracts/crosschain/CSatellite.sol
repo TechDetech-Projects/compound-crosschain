@@ -5,7 +5,7 @@ import '@axelar-network/axelar-gmp-sdk-solidity/contracts/executable/AxelarExecu
 import '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IERC20.sol';
 import '@openzeppelin/contracts/utils/Strings.sol';
 
-contract LendingSatellite is AxelarExecutable {
+contract CSatellite is AxelarExecutable {
     string public baseChain;
     string public baseContract;
     IERC20 underlyingToken;

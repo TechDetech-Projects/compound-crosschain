@@ -13,6 +13,10 @@ module.exports = {
     dev_moonbeam: {
       host: "127.0.0.1:8500/0",
       network_id: 2500
+    },
+    dev_polygon: {
+      host: "127.0.0.1:8500/4",
+      network_id: 2504
     }
   },
 
